@@ -9,8 +9,8 @@ import argparse
 
 import hyper_parameters as hparams
 from model_common_test import DiffPastingV3, VirtualSketchingModel
-from utils import reset_graph, load_checkpoint, update_hyperparams, draw, \
-    save_seq_data, image_pasting_v3_testing, draw_strokes
+from utils import load_checkpoint, update_hyperparams, draw, \
+    save_seq_data, image_pasting_v3_testing, draw_strokes #Removing reset_graph as tensorflow 2 runs on eager mode and not graph mode 
 from dataset_utils import load_dataset_testing
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -313,7 +313,7 @@ def main_testing(test_image_base_dir, test_dataset, test_image_name,
     test_image_raw_name = test_image_name[:test_image_name.find('.')]
     model_dir = os.path.join(model_base_dir, model_name)
 
-    reset_graph()
+    # reset_graph() #Commenting as tensorflow 2 runs on eager mode and not graph mode 
     sampling_model = VirtualSketchingModel(sample_hps_model)
 
     # differentiable pasting graph

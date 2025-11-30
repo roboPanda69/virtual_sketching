@@ -11,12 +11,13 @@ import matplotlib.pyplot as plt
 # Tensorflow utils
 #############################################
 
-def reset_graph():
-    """Closes the current default session and resets the graph."""
-    sess = tf.get_default_session()
-    if sess:
-        sess.close()
-    tf.reset_default_graph()
+#Commenting as tensorflow 2 runs on eager mode and not graph mode 
+# def reset_graph():
+#     """Closes the current default session and resets the graph."""
+#     sess = tf.get_default_session()
+#     if sess:
+#         sess.close()
+#     tf.reset_default_graph()
 
 
 def load_checkpoint(sess, checkpoint_path, ras_only=False, perceptual_only=False, gen_model_pretrain=False,
@@ -361,12 +362,12 @@ def draw_strokes(data, save_root, save_filename, input_img, image_size, init_cur
 
 
 def update_hyperparams(model_params, model_base_dir, model_name, infer_dataset):
-    with tf.gfile.Open(os.path.join(model_base_dir, model_name, 'model_config.json'), 'r') as f:
+    with tf.io.gfile.GFile(os.path.join(model_base_dir, model_name, 'model_config.json'), 'r') as f: #In TensorFlow 2, tf.gfile is gone.
         data = json.load(f)
 
     ignored_keys = ['image_size_small', 'image_size_large', 'z_size', 'raster_perc_loss_layer', 'raster_loss_wk',
-                    'decreasing_sn', 'raster_loss_weight']
-    for name in model_params._hparam_types.keys():
+                    'decreasing_sn', 'raster_loss_weight', 'program_name', 'input_channel'] #We dont need program_name and input_channel for now
+    for name in vars(model_params).keys():
         if name not in data and name not in ignored_keys:
             raise Exception(name, 'not in model_config.json')
 
@@ -385,6 +386,7 @@ def update_hyperparams(model_params, model_base_dir, model_name, infer_dataset):
         if pop_key in data.keys():
             data.pop(pop_key)
 
-    model_params.parse_json(json.dumps(data))
+    for key, value in data.items(): #With SimpleNamespace, hyperparams are just attributes. Hence we replaced.
+        setattr(model_params, key, value)
 
     return model_params

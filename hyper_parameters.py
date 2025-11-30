@@ -1,45 +1,26 @@
 import tensorflow as tf
+from absl import flags
+from types import SimpleNamespace
 
 
 #############################################
 # Common parameters
 #############################################
 
-FLAGS = tf.app.flags.FLAGS
+FLAGS = flags.FLAGS #tf.app was removed after TensorFlow 1.x.
 
-tf.app.flags.DEFINE_string(
-    'dataset_dir',
-    'datasets',
-    'The directory of sketch data of the dataset.')
-tf.app.flags.DEFINE_string(
-    'log_root',
-    'outputs/log',
-    'Directory to store tensorboard.')
-tf.app.flags.DEFINE_string(
-    'log_img_root',
-    'outputs/log_img',
-    'Directory to store intermediate output images.')
-tf.app.flags.DEFINE_string(
-    'snapshot_root',
-    'outputs/snapshot',
-    'Directory to store model checkpoints.')
-tf.app.flags.DEFINE_string(
-    'neural_renderer_path',
-    'outputs/snapshot/pretrain_neural_renderer/renderer_300000.tfmodel',
-    'Path to the neural renderer model.')
-tf.app.flags.DEFINE_string(
-    'perceptual_model_root',
-    'outputs/snapshot/pretrain_perceptual_model',
-    'Directory to store perceptual model.')
-tf.app.flags.DEFINE_string(
-    'data',
-    '',
-    'The dataset type.')
+flags.DEFINE_string('dataset_dir', 'datasets', 'The directory of sketch data of the dataset.')
+flags.DEFINE_string('log_root', 'outputs/log', 'Directory to store tensorboard.')
+flags.DEFINE_string('log_img_root', 'outputs/log_img', 'Directory to store intermediate output images.')
+flags.DEFINE_string('snapshot_root', 'outputs/snapshot', 'Directory to store model checkpoints.')
+flags.DEFINE_string('neural_renderer_path', 'outputs/snapshot/pretrain_neural_renderer/renderer_300000.tfmodel', 'Path to the neural renderer model.')
+flags.DEFINE_string('perceptual_model_root', 'outputs/snapshot/pretrain_perceptual_model', 'Directory to store perceptual model.')
+flags.DEFINE_string('data', '', 'The dataset type.')
 
 
 def get_default_hparams_clean():
     """Return default HParams for sketch-rnn."""
-    hparams = tf.contrib.training.HParams(
+    hparams = SimpleNamespace( #tf.contrib is fully removed in TensorFlow 2.
         program_name='new_train_clean_line_drawings',
         data_set='clean_line_drawings',  # Our dataset.
 

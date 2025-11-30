@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
+import keras
 
 
 def orthogonal(shape):
@@ -58,7 +59,7 @@ def lstm_ortho_initializer(scale=1.0):
     return _initializer
 
 
-class LSTMCell(tf.contrib.rnn.RNNCell):
+class LSTMCell(keras.layers.Layer): #In TF 2.x tf.contrib completely removed, so anything like tf.contrib.rnn.RNNCell will fail.
     """Vanilla LSTM cell.
 
   Uses ortho initializer, and also recurrent dropout without memory loss
@@ -234,7 +235,7 @@ def super_linear(x,
         return tf.matmul(x, w)
 
 
-class LayerNormLSTMCell(tf.contrib.rnn.RNNCell):
+class LayerNormLSTMCell(keras.layers.Layer): #In TF 2.x tf.contrib completely removed, so anything like tf.contrib.rnn.RNNCell will fail.
     """Layer-Norm, with Ortho Init. and Recurrent Dropout without Memory Loss.
 
   https://arxiv.org/abs/1607.06450 - Layer Norm
@@ -311,7 +312,7 @@ class LayerNormLSTMCell(tf.contrib.rnn.RNNCell):
         return new_h, tf.concat([new_h, new_c], 1)
 
 
-class HyperLSTMCell(tf.contrib.rnn.RNNCell):
+class HyperLSTMCell(keras.layers.Layer): #In TF 2.x tf.contrib completely removed, so anything like tf.contrib.rnn.RNNCell will fail.
     """HyperLSTM with Ortho Init, Layer Norm, Recurrent Dropout, no Memory Loss.
 
   https://arxiv.org/abs/1609.09106
@@ -375,6 +376,10 @@ class HyperLSTMCell(tf.contrib.rnn.RNNCell):
     @property
     def state_size(self):
         return 2 * self.total_num_units
+    
+    def zero_state(self, batch_size, dtype=tf.float32):
+        """Mimic TF1 RNNCell.zero_state: return all-zero initial state."""
+        return tf.zeros([batch_size, self.state_size], dtype=dtype)
 
     def get_output(self, state):
         total_h, unused_total_c = tf.split(state, 2, 1)

@@ -1,5 +1,7 @@
 import rnn
 import tensorflow as tf
+import keras
+from keras import ops
 
 from subnet_tf_utils import generative_cnn_encoder, generative_cnn_encoder_deeper, generative_cnn_encoder_deeper13, \
     generative_cnn_c3_encoder, generative_cnn_c3_encoder_deeper, generative_cnn_c3_encoder_deeper13, \
@@ -77,7 +79,7 @@ class VirtualSketchingModel(object):
         """Initializer for the model.
 
     Args:
-       hps: a HParams object containing model hyperparameters
+       hps: a SimpleNamespace object containing model hyperparameters
        gpu_mode: a boolean that when True, uses GPU mode.
        reuse: a boolean that when true, attemps to reuse variables.
     """
@@ -155,56 +157,58 @@ class VirtualSketchingModel(object):
                 dec_cell, output_keep_prob=self.hps.output_dropout_prob)
         self.dec_cell = dec_cell
 
-        self.input_photo = tf.placeholder(dtype=tf.float32,
-                                          shape=[self.hps.batch_size, None, None, self.hps.input_channel])  # [0.0-stroke, 1.0-BG]
-        self.init_cursor = tf.placeholder(
+        #tf.placeholder() does not exist in tensorflow 2. Also we exclude batch size in shape. Keras handles it automatically
+        self.input_photo = tf.keras.Input(shape=(None, None, self.hps.input_channel),   # batch size excluded by default
+                                          dtype=tf.float32)  # [0.0-stroke, 1.0-BG]
+        self.init_cursor = tf.keras.Input(
             dtype=tf.float32,
-            shape=[self.hps.batch_size, 1, 2])  # (N, 1, 2), in size [0.0, 1.0)
-        self.init_width = tf.placeholder(
+            shape=[1, 2])  # (N, 1, 2), in size [0.0, 1.0)
+        self.init_width = tf.keras.Input(
             dtype=tf.float32,
-            shape=[self.hps.batch_size])  # (1), in [0.0, 1.0]
-        self.init_scaling = tf.placeholder(
+            shape=())  # (1), in [0.0, 1.0]
+        self.init_scaling = tf.keras.Input(
             dtype=tf.float32,
             shape=[self.hps.batch_size])  # (N), in [0.0, 1.0]
-        self.init_window_size = tf.placeholder(
+        self.init_window_size = tf.keras.Input(
             dtype=tf.float32,
             shape=[self.hps.batch_size])  # (N)
-        self.image_size = tf.placeholder(dtype=tf.int32, shape=())  # ()
+        self.image_size = tf.keras.Input(dtype=tf.int32, shape=())  # ()
 
     ###########################
 
     def normalize_image_m1to1(self, in_img_0to1):
-        norm_img_m1to1 = tf.multiply(in_img_0to1, 2.0)
-        norm_img_m1to1 = tf.subtract(norm_img_m1to1, 1.0)
+        norm_img_m1to1 = ops.multiply(in_img_0to1, 2.0)
+        norm_img_m1to1 = ops.subtract(norm_img_m1to1, 1.0)
         return norm_img_m1to1
 
     def add_coords(self, input_tensor):
         batch_size_tensor = tf.shape(input_tensor)[0]  # get N size
+        print(batch_size_tensor)
 
-        xx_ones = tf.ones([batch_size_tensor, self.hps.raster_size], dtype=tf.int32)  # e.g. (N, raster_size)
-        xx_ones = tf.expand_dims(xx_ones, -1)  # e.g. (N, raster_size, 1)
-        xx_range = tf.tile(tf.expand_dims(tf.range(self.hps.raster_size), 0),
+        xx_ones = ops.ones((batch_size_tensor, self.hps.raster_size), dtype="int32")  # e.g. (N, raster_size)
+        xx_ones = ops.expand_dims(xx_ones, -1)  # e.g. (N, raster_size, 1)
+        xx_range = ops.tile(tf.expand_dims(tf.range(self.hps.raster_size), 0),
                            [batch_size_tensor, 1])  # e.g. (N, raster_size)
-        xx_range = tf.expand_dims(xx_range, 1)  # e.g. (N, 1, raster_size)
+        xx_range = ops.expand_dims(xx_range, 1)  # e.g. (N, 1, raster_size)
 
-        xx_channel = tf.matmul(xx_ones, xx_range)  # e.g. (N, raster_size, raster_size)
-        xx_channel = tf.expand_dims(xx_channel, -1)  # e.g. (N, raster_size, raster_size, 1)
+        xx_channel = ops.matmul(xx_ones, xx_range)  # e.g. (N, raster_size, raster_size)
+        xx_channel = ops.expand_dims(xx_channel, -1)  # e.g. (N, raster_size, raster_size, 1)
 
-        yy_ones = tf.ones([batch_size_tensor, self.hps.raster_size], dtype=tf.int32)  # e.g. (N, raster_size)
-        yy_ones = tf.expand_dims(yy_ones, 1)  # e.g. (N, 1, raster_size)
-        yy_range = tf.tile(tf.expand_dims(tf.range(self.hps.raster_size), 0),
+        yy_ones = ops.ones([batch_size_tensor, self.hps.raster_size], "int32")  # e.g. (N, raster_size)
+        yy_ones = ops.expand_dims(yy_ones, 1)  # e.g. (N, 1, raster_size)
+        yy_range = ops.tile(tf.expand_dims(tf.range(self.hps.raster_size), 0),
                            [batch_size_tensor, 1])  # (N, raster_size)
-        yy_range = tf.expand_dims(yy_range, -1)  # e.g. (N, raster_size, 1)
+        yy_range = ops.expand_dims(yy_range, -1)  # e.g. (N, raster_size, 1)
 
-        yy_channel = tf.matmul(yy_range, yy_ones)  # e.g. (N, raster_size, raster_size)
-        yy_channel = tf.expand_dims(yy_channel, -1)  # e.g. (N, raster_size, raster_size, 1)
+        yy_channel = ops.matmul(yy_range, yy_ones)  # e.g. (N, raster_size, raster_size)
+        yy_channel = ops.expand_dims(yy_channel, -1)  # e.g. (N, raster_size, raster_size, 1)
 
-        xx_channel = tf.cast(xx_channel, 'float32') / (self.hps.raster_size - 1)
-        yy_channel = tf.cast(yy_channel, 'float32') / (self.hps.raster_size - 1)
+        xx_channel = ops.cast(xx_channel, 'float32') / (self.hps.raster_size - 1)
+        yy_channel = ops.cast(yy_channel, 'float32') / (self.hps.raster_size - 1)
         # xx_channel = xx_channel * 2 - 1  # [-1, 1]
         # yy_channel = yy_channel * 2 - 1
 
-        ret = tf.concat([
+        ret = ops.concatenate([
             input_tensor,
             xx_channel,
             yy_channel,
@@ -234,31 +238,45 @@ class VirtualSketchingModel(object):
         else:
             raise Exception('unknown resize_method', self.hps.resize_method)
 
-        patch_photo = tf.stop_gradient(patch_photo)
-        patch_canvas = tf.stop_gradient(patch_canvas)
-        cursor_pos = tf.stop_gradient(cursor_pos)
-        window_size = tf.stop_gradient(window_size)
+        patch_photo = ops.stop_gradient(patch_photo)
+        patch_canvas = ops.stop_gradient(patch_canvas)
+        cursor_pos = ops.stop_gradient(cursor_pos)
+        window_size = ops.stop_gradient(window_size)
 
-        entire_photo_small = tf.stop_gradient(tf.image.resize_images(entire_photo,
-                                                                      (self.hps.raster_size, self.hps.raster_size),
-                                                                      method=resize_method))
-        entire_canvas_small = tf.stop_gradient(tf.image.resize_images(entire_canvas,
-                                                                      (self.hps.raster_size, self.hps.raster_size),
-                                                                      method=resize_method))
+        entire_photo_small = keras.layers.Lambda(
+            lambda x: ops.stop_gradient(
+                tf.image.resize(
+                    x,
+                    (self.hps.raster_size, self.hps.raster_size),
+                    method=resize_method
+                )
+            ),
+            output_shape=lambda shape: (None, self.hps.raster_size, self.hps.raster_size, shape[-1])
+        )(entire_photo)
+        entire_canvas_small = keras.layers.Lambda(
+            lambda x: ops.stop_gradient(
+                tf.image.resize(
+                    x,
+                    (self.hps.raster_size, self.hps.raster_size),
+                    method=resize_method
+                )
+            ),
+            output_shape=lambda shape: (None, self.hps.raster_size, self.hps.raster_size, shape[-1])
+        )(entire_canvas)
         entire_photo_small = self.normalize_image_m1to1(entire_photo_small)  # [-1.0-stroke, 1.0-BG]
         entire_canvas_small = self.normalize_image_m1to1(entire_canvas_small)  # [-1.0-stroke, 1.0-BG]
 
         if self.hps.encode_cursor_type == 'value':
-            cursor_pos_norm = tf.expand_dims(cursor_pos, axis=1)  # (N, 1, 1, 2)
-            cursor_pos_norm = tf.tile(cursor_pos_norm, [1, self.hps.raster_size, self.hps.raster_size, 1])
+            cursor_pos_norm = ops.expand_dims(cursor_pos, axis=1)  # (N, 1, 1, 2)
+            cursor_pos_norm = ops.tile(cursor_pos_norm, [1, self.hps.raster_size, self.hps.raster_size, 1])
             cursor_info = cursor_pos_norm
         else:
             raise Exception('Unknown encode_cursor_type', self.hps.encode_cursor_type)
 
-        batch_input_combined = tf.concat([patch_photo, patch_canvas, entire_photo_small, entire_canvas_small, cursor_info],
+        batch_input_combined = ops.concatenate([patch_photo, patch_canvas, entire_photo_small, entire_canvas_small, cursor_info],
                                 axis=-1)  # [N, raster_size, raster_size, 6/10]
-        batch_input_local = tf.concat([patch_photo, patch_canvas], axis=-1)  # [N, raster_size, raster_size, 2/4]
-        batch_input_global = tf.concat([entire_photo_small, entire_canvas_small, cursor_info],
+        batch_input_local = ops.concatenate([patch_photo, patch_canvas], axis=-1)  # [N, raster_size, raster_size, 2/4]
+        batch_input_global = ops.concatenate([entire_photo_small, entire_canvas_small, cursor_info],
                                        axis=-1)  # [N, raster_size, raster_size, 4/6]
 
         if self.hps.model_mode == 'train':
@@ -269,6 +287,7 @@ class VirtualSketchingModel(object):
             dropout_keep_prob = 1.0
 
         if self.hps.add_coordconv:
+            print(batch_input_combined)
             batch_input_combined = self.add_coords(batch_input_combined)  # (N, in_H, in_W, in_dim + 2)
             batch_input_local = self.add_coords(batch_input_local)  # (N, in_H, in_W, in_dim + 2)
             batch_input_global = self.add_coords(batch_input_global)  # (N, in_H, in_W, in_dim + 2)
@@ -438,25 +457,32 @@ class VirtualSketchingModel(object):
         :param input_img: (N, image_size, image_size, k), [0.0-BG, 1.0-stroke]
         :param window_sizes: (N, 1, 1), float32, with grad
         """
-        window_sizes_non_grad = tf.stop_gradient(window_sizes)  # (N, 1, 1), no grad
+        window_sizes_non_grad = ops.stop_gradient(window_sizes)  # (N, 1, 1), no grad
 
-        cursor_pos = tf.multiply(cursor_position, tf.cast(image_size, tf.float32))
-        cursor_x, cursor_y = tf.split(cursor_pos, 2, axis=-1)  # (N, 1, 1)
+        cursor_pos = ops.multiply(cursor_position, ops.cast(image_size, "float32"))
+        cursor_x, cursor_y = ops.split(cursor_pos, 2, axis=-1)  # (N, 1, 1)
 
         y1 = cursor_y - (window_sizes_non_grad - 1.0) / 2
         x1 = cursor_x - (window_sizes_non_grad - 1.0) / 2
         y2 = y1 + (window_sizes_non_grad - 1.0)
         x2 = x1 + (window_sizes_non_grad - 1.0)
-        boxes = tf.concat([y1, x1, y2, x2], axis=-1)  # (N, 1, 4)
-        boxes = tf.squeeze(boxes, axis=1)  # (N, 4)
-        boxes = boxes / tf.cast(image_size - 1, tf.float32)
+        boxes = ops.concatenate([y1, x1, y2, x2], axis=-1)  # (N, 1, 4)
+        boxes = ops.squeeze(boxes, axis=1)  # (N, 4)
+        boxes = boxes / ops.cast(image_size - 1, "float32")
 
-        box_ind = tf.ones_like(cursor_x)[:, 0, 0]  # (N)
-        box_ind = tf.cast(box_ind, dtype=tf.int32)
-        box_ind = tf.cumsum(box_ind) - 1
+        box_ind = ops.ones_like(cursor_x)[:, 0, 0]  # (N)
+        box_ind = ops.cast(box_ind, "int32")
+        box_ind = ops.cumsum(box_ind) - 1
 
-        curr_patch_imgs = tf.image.crop_and_resize(input_img, boxes, box_ind,
-                                                   crop_size=[self.hps.raster_size, self.hps.raster_size])
+        curr_patch_imgs = keras.layers.Lambda(
+            lambda x: tf.image.crop_and_resize(
+                x[0],        # input_img
+                x[1],        # boxes
+                x[2],        # box_ind
+                crop_size=[self.hps.raster_size, self.hps.raster_size]
+            ),
+        output_shape=(self.hps.raster_size, self.hps.raster_size, self.hps.input_channel),
+        )([input_img, boxes, box_ind])
         #  (N, raster_size, raster_size, k), [0.0-BG, 1.0-stroke]
         return curr_patch_imgs
 
@@ -465,13 +491,13 @@ class VirtualSketchingModel(object):
         prev_state = self.initial_state  # (N, dec_rnn_size * 3)
 
         prev_width = self.init_width  # (N)
-        prev_width = tf.expand_dims(tf.expand_dims(prev_width, axis=-1), axis=-1)  # (N, 1, 1)
+        prev_width = ops.expand_dims(ops.expand_dims(prev_width, axis=-1), axis=-1)  # (N, 1, 1)
 
         prev_scaling = self.init_scaling  # (N)
-        prev_scaling = tf.reshape(prev_scaling, (-1, 1, 1))  # (N, 1, 1)
+        prev_scaling = ops.reshape(prev_scaling, (-1, 1, 1))  # (N, 1, 1)
 
         prev_window_size = self.init_window_size  # (N)
-        prev_window_size = tf.reshape(prev_window_size, (-1, 1, 1))  # (N, 1, 1)
+        prev_window_size = ops.reshape(prev_window_size, (-1, 1, 1))  # (N, 1, 1)
 
         cursor_position_temp = self.init_cursor
         self.cursor_position = cursor_position_temp  # (N, 1, 2), in size [0.0, 1.0)
@@ -480,8 +506,8 @@ class VirtualSketchingModel(object):
         other_params_list = []
         pen_ras_list = []
 
-        curr_canvas_soft = tf.zeros_like(self.input_photo[:, :, :, 0])  # (N, image_size, image_size), [0.0-BG, 1.0-stroke]
-        curr_canvas_hard = tf.zeros_like(curr_canvas_soft)  # [0.0-BG, 1.0-stroke]
+        curr_canvas_soft = ops.zeros_like(self.input_photo[:, :, :, 0])  # (N, image_size, image_size), [0.0-BG, 1.0-stroke]
+        curr_canvas_hard = ops.zeros_like(curr_canvas_soft)  # [0.0-BG, 1.0-stroke]
 
         #### sampling part - start ####
         self.curr_canvas_hard = curr_canvas_hard
@@ -494,19 +520,19 @@ class VirtualSketchingModel(object):
             raise Exception('Unknown cropping_type', self.hps.cropping_type)
 
         for time_i in range(self.hps.max_seq_len):
-            cursor_position_non_grad = tf.stop_gradient(cursor_position_loop)  # (N, 1, 2), in size [0.0, 1.0)
+            cursor_position_non_grad = ops.stop_gradient(cursor_position_loop)  # (N, 1, 2), in size [0.0, 1.0)
 
-            curr_window_size = tf.multiply(prev_scaling, tf.stop_gradient(prev_window_size))  # float, with grad
-            curr_window_size = tf.maximum(curr_window_size, tf.cast(self.hps.min_window_size, tf.float32))
-            curr_window_size = tf.minimum(curr_window_size, tf.cast(image_size, tf.float32))
+            curr_window_size = ops.multiply(prev_scaling, ops.stop_gradient(prev_window_size))  # float, with grad
+            curr_window_size = ops.maximum(curr_window_size, ops.cast(self.hps.min_window_size, "float32"))
+            curr_window_size = ops.minimum(curr_window_size, ops.cast(image_size, "float32"))
 
             ## patch-level encoding
             # Here, we make the gradients from canvas_z to curr_canvas_hard be None to avoid recurrent gradient propagation.
-            curr_canvas_hard_non_grad = tf.stop_gradient(self.curr_canvas_hard)
-            curr_canvas_hard_non_grad = tf.expand_dims(curr_canvas_hard_non_grad, axis=-1)
+            curr_canvas_hard_non_grad = ops.stop_gradient(self.curr_canvas_hard)
+            curr_canvas_hard_non_grad = ops.expand_dims(curr_canvas_hard_non_grad, axis=-1)
 
             # input_photo: (N, image_size, image_size, 1/3), [0.0-stroke, 1.0-BG]
-            crop_inputs = tf.concat([1.0 - self.input_photo, curr_canvas_hard_non_grad], axis=-1)  # (N, H_p, W_p, 1+1)
+            crop_inputs = ops.concatenate([1.0 - self.input_photo, curr_canvas_hard_non_grad], axis=-1)  # (N, H_p, W_p, 1+1)
 
             cropped_outputs = cropping_func(cursor_position_non_grad, crop_inputs, image_size, curr_window_size)
             index_offset = self.hps.input_channel - 1
@@ -531,23 +557,23 @@ class VirtualSketchingModel(object):
                 cursor_position_non_grad,
                 image_size,
                 curr_window_size)  # (N, z_size)
-            combined_z = tf.expand_dims(combined_z, axis=1)  # (N, 1, z_size)
+            combined_z = ops.expand_dims(combined_z, axis=1)  # (N, 1, z_size)
 
             curr_window_size_top_side_norm_non_grad = \
                 tf.stop_gradient(curr_window_size / tf.cast(image_size, tf.float32))
             curr_window_size_bottom_side_norm_non_grad = \
                 tf.stop_gradient(curr_window_size / tf.cast(self.hps.min_window_size, tf.float32))
             if not self.hps.concat_win_size:
-                combined_z = tf.concat([tf.stop_gradient(prev_width), combined_z], 2)  # (N, 1, 2+z_size)
+                combined_z = ops.concat([tf.stop_gradient(prev_width), combined_z], 2)  # (N, 1, 2+z_size)
             else:
-                combined_z = tf.concat([tf.stop_gradient(prev_width),
+                combined_z = ops.concat([tf.stop_gradient(prev_width),
                                         curr_window_size_top_side_norm_non_grad,
                                         curr_window_size_bottom_side_norm_non_grad,
                                         combined_z],
                                        2)  # (N, 1, 2+z_size)
 
             if self.hps.concat_cursor:
-                prev_input_x = tf.concat([cursor_position_non_grad, combined_z], 2)  # (N, 1, 2+2+z_size)
+                prev_input_x = ops.concat([cursor_position_non_grad, combined_z], 2)  # (N, 1, 2+2+z_size)
             else:
                 prev_input_x = combined_z  # (N, 1, 2+z_size)
 
@@ -557,8 +583,8 @@ class VirtualSketchingModel(object):
             # o_other_params: (N * 1, 6)
             # o_pen_ras: (N * 1, 2), after softmax
 
-            o_other_params = tf.reshape(o_other_params, [-1, 1, 6])  # (N, 1, 6)
-            o_pen_ras_raw = tf.reshape(o_pen_ras, [-1, 1, 2])  # (N, 1, 2)
+            o_other_params = ops.reshape(o_other_params, [-1, 1, 6])  # (N, 1, 6)
+            o_pen_ras_raw = ops.reshape(o_pen_ras, [-1, 1, 2])  # (N, 1, 2)
 
             other_params_list.append(o_other_params)
             pen_ras_list.append(o_pen_ras_raw)
@@ -567,8 +593,8 @@ class VirtualSketchingModel(object):
 
             prev_state = next_state
 
-        other_params_ = tf.reshape(tf.concat(other_params_list, axis=1), [-1, 6])  # (N * max_seq_len, 6)
-        pen_ras_ = tf.reshape(tf.concat(pen_ras_list, axis=1), [-1, 2])  # (N * max_seq_len, 2)
+        other_params_ = ops.reshape(tf.concat(other_params_list, axis=1), [-1, 6])  # (N * max_seq_len, 6)
+        pen_ras_ = ops.reshape(tf.concat(pen_ras_list, axis=1), [-1, 2])  # (N * max_seq_len, 2)
 
         return other_params_, pen_ras_, prev_state
 

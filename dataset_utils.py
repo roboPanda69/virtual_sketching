@@ -5,13 +5,14 @@ import scipy.io
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+from types import SimpleNamespace
 
 from rasterization_utils.RealRenderer import GizehRasterizor as RealRenderer
 
 
 def copy_hparams(hparams):
-    """Return a copy of an HParams instance."""
-    return tf.contrib.training.HParams(**hparams.values())
+    """Return a copy of an SimpleNamespace-like instance."""
+    return SimpleNamespace(**vars(hparams))
 
 
 class GeneralRawDataLoader(object):
